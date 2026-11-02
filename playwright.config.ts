@@ -22,14 +22,21 @@ export default defineConfig({
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  reporter: [
+    ['list'],
+    ['html', { open: 'never' }],
+    /* Jira traceability matrix + evidence index. See reporters/traceability-reporter.ts */
+    ['./reporters/traceability-reporter.ts', { outputFolder: 'traceability-report' }],
+  ],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('')`. */
     // baseURL: 'http://localhost:3000',
 
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    /* Test evidence: on CI keep a trace and screenshot for every test (pass or fail), for audit.
+       Locally only keep them when a test fails. See https://playwright.dev/docs/trace-viewer */
+    trace: process.env.CI ? 'on' : 'retain-on-failure',
+    screenshot: process.env.CI ? 'on' : 'only-on-failure',
 
     /* Locally, the Zscaler proxy re-signs HTTPS traffic, which Chromium/Firefox reject.
        Accept it outside CI only; CI keeps strict certificate checks. */
