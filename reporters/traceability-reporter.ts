@@ -38,6 +38,8 @@ export interface TraceabilityOptions {
   failOnUntagged?: boolean;
   /** Regex (source) for a ticket key. Default: `[A-Z][A-Z0-9]+-\d+`. */
   ticketPattern?: string;
+  /** Tag that marks a test as deliberately not linked to Jira (e.g. agent seed files). Default: `@no-jira`. */
+  exemptTag?: string;
 }
 
 type Outcome = 'passed' | 'failed' | 'flaky' | 'skipped';
@@ -102,6 +104,7 @@ export default class TraceabilityReporter implements Reporter {
       expectedTicketsFile: options.expectedTicketsFile ?? process.env.TRACE_EXPECTED_TICKETS,
       failOnUntagged: options.failOnUntagged ?? !!process.env.CI,
       ticketPattern: options.ticketPattern ?? '[A-Z][A-Z0-9]+-\\d+',
+      exemptTag: options.exemptTag ?? '@no-jira',
     };
   }
 
@@ -119,7 +122,9 @@ export default class TraceabilityReporter implements Reporter {
     const tests = this.collectTests();
     const expected = this.readExpectedTickets();
     const tickets = this.groupByTicket(tests, expected);
-    const untagged = tests.filter((t) => t.tickets.length === 0);
+    const isExempt = (t: TestRow) => t.tags.includes(this.opts.exemptTag);
+    const exempt = tests.filter((t) => t.tickets.length === 0 && isExempt(t));
+    const untagged = tests.filter((t) => t.tickets.length === 0 && !isExempt(t));
     const projects = [...new Set(tests.flatMap((t) => t.executions.map((e) => e.project)))];
     const gateFailed = this.opts.failOnUntagged && untagged.length > 0;
     const run = this.runMetadata(result);
@@ -138,10 +143,12 @@ export default class TraceabilityReporter implements Reporter {
         notTested: tickets.filter((t) => t.status === 'not-tested').length,
         tests: tests.length,
         untaggedTests: untagged.length,
+        exemptTests: exempt.length,
       },
       projects,
       tickets,
       untaggedTests: untagged,
+      exemptTests: exempt,
     };
 
     const outDir = path.resolve(this.baseDir, this.opts.outputFolder);
@@ -350,6 +357,7 @@ type Report = {
   projects: string[];
   tickets: TicketRow[];
   untaggedTests: TestRow[];
+  exemptTests: TestRow[];
 };
 
 const ICON: Record<Outcome, string> = { passed: '✅', failed: '❌', flaky: '⚠️', skipped: '⏭️' };
@@ -443,6 +451,11 @@ function renderHtml(r: Report, htmlReportPath: string): string {
         .map((t) => `<li><code>${esc(t.file)}:${t.line}</code> ${esc(t.title)}</li>`)
         .join('')}</ul></section>`
     : '';
+  const exemptList = r.exemptTests.length
+    ? `<section><h2>Exempt from Jira linking (${r.exemptTests.length})</h2><ul>${r.exemptTests
+        .map((t) => `<li><code>${esc(t.file)}:${t.line}</code> ${esc(t.title)}</li>`)
+        .join('')}</ul></section>`
+    : '';
 
   const meta: [string, string | undefined][] = [
     ['Run result', run.status.toUpperCase()],
@@ -517,6 +530,7 @@ ${card('Tickets', s.tickets, '')}${card('Passed', s.passed, 'passed')}${card('Fa
 <tbody>${rows || `<tr><td colspan="${r.projects.length + 4}" class="muted">No tickets found.</td></tr>`}</tbody>
 </table></div>
 ${untagged}
+${exemptList}
 <h2>Run details</h2>
 <div class="wrap"><table class="meta"><tbody>${metaRows}</tbody></table></div>
 <footer>Evidence links open each execution (steps, screenshots, trace) in the Playwright HTML report, which must sit at
