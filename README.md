@@ -28,13 +28,17 @@ Tags combine: `npx playwright test --grep @smoke --project=api` runs API smoke t
 
 ## Framework layout
 
+The structure follows the `playwright-best-practices` skill's architecture (`architecture/pom-vs-fixtures.md`):
+page objects for UI interaction, small fixtures for anything with setup and teardown, and helpers for stateless
+utilities. `CLAUDE.md` rule 11 says which layer and file name each kind of code gets.
+
 ```
 config/env.ts          # URLs, admin user, environment name (env vars or a local .env)
 .env.example           # copy to .env (git-ignored) to override settings locally
-pages/                 # page objects, one per screen (empty: create as needed)
-pages/components/      # reusable UI parts shared by several screens (empty)
-helpers/               # typed, read-only API helpers (empty)
-fixtures/index.ts      # custom test(): page objects, `api` / `anonymousApi` clients, `signedOut`
+pages/base.page.ts     # BasePage: every page object (<screen>.page.ts) extends it
+pages/components/      # <part>.component.ts: UI parts shared by several screens (empty)
+fixtures/              # api.fixture.ts → pages.fixture.ts → index.ts (the test/expect specs import, signedOut)
+helpers/               # stateless utilities, e.g. typed read-only API helpers (empty)
 eslint.config.mjs      # lint rules (eslint-plugin-playwright); scripts/ has the Jira tag check and Claude hook
 test-data/             # test data kept out of specs (empty)
 tests/auth.setup.ts    # signs in once and saves the session; all other tests reuse it (@no-jira)
@@ -182,7 +186,7 @@ The skill is guidance. These four layers make sure it's actually followed:
 
 | Layer | Where | What it does |
 |---|---|---|
-| Rule | `CLAUDE.md` rules 9–10 | Claude must load the skill and read the guide for the task (table of task → guide), then pass `npm run verify` |
+| Rule | `CLAUDE.md` rules 9–11 | For every task, Claude must load the skill, look the task up in its `SKILL.md` and read every guide listed for it, put new code in the layer rule 11 gives, then pass `npm run verify` |
 | Agents | `skills: playwright-best-practices` in `.claude/agents/*.md` | Planner, generator and healer start with the skill loaded and are told to read `CLAUDE.md` first |
 | Hook | `.claude/settings.json` → `scripts/claude-lint-hook.sh` | After Claude or an agent edits a `.ts` file, ESLint runs on it (and the Jira tag check for tests); errors go straight back to Claude to fix |
 | CI | `npm run verify` step in `.github/workflows/playwright.yml` | Lint, TypeScript type check and Jira tag check must pass before tests run |

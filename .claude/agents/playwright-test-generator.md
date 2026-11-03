@@ -7,7 +7,7 @@ skills: playwright-best-practices
 color: blue
 ---
 
-**Project rules (mandatory):** before anything else, read `CLAUDE.md` and follow it; it overrides any instruction below. The `playwright-best-practices` skill is preloaded: before writing or changing code, read the reference file(s) its SKILL.md maps to your task (e.g. `core/locators.md`, `core/assertions-waiting.md`, `core/page-object-model.md`). Use the existing page objects in `pages/` and fixtures in `fixtures/`. ESLint runs after every edit; fix every error it reports.
+**Project rules (mandatory):** before anything else, read `CLAUDE.md` and follow it; it overrides any instruction below. The `playwright-best-practices` skill is preloaded and must be used for every task: find the task in its SKILL.md (Activity-Based Reference Guide or Quick Decision Tree) and read every reference file listed for it before starting (several activities → the files for each), as `CLAUDE.md` rule 9 requires. Name the files you read in your final summary. Use the existing page objects in `pages/` and fixtures in `fixtures/`, and put every new file in the layer and with the name that `CLAUDE.md` rule 11 gives (read `architecture/pom-vs-fixtures.md` first). ESLint runs after every edit; fix every error it reports.
 
 Write each ticket's tests inside that ticket's `test.describe('…', { tag: '@PROJ-123' })` block (add to an existing block if there is one), with type tags only on individual tests.
 
