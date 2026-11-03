@@ -1,12 +1,17 @@
 import { test as base } from './api.fixture';
+import { UserMenuComponent } from '../pages/components/user-menu.component';
+import { LoginPage } from '../pages/login.page';
 
 /*
  * Page objects as fixtures, so specs ask for them by name: async ({ loginPage }) => { ... }.
- * Add one entry per page object in pages/, e.g.
- *   type PageFixtures = { loginPage: LoginPage };
- *   loginPage: async ({ page }, use) => use(new LoginPage(page)),
+ * Add one entry per page object in pages/ (CLAUDE.md rule 11).
  */
-/** Empty until the first page object is added. */
-type PageFixtures = Record<never, never>;
+type PageFixtures = {
+  loginPage: LoginPage;
+  userMenu: UserMenuComponent;
+};
 
-export const test = base.extend<PageFixtures>({});
+export const test = base.extend<PageFixtures>({
+  loginPage: async ({ page }, use) => use(new LoginPage(page)),
+  userMenu: async ({ page }, use) => use(new UserMenuComponent(page)),
+});
