@@ -5,4 +5,5 @@ node_modules/
 /playwright/.cache/
 /playwright/.auth/
 .env
-/traceability-report/
+.env.*
+!.env.example
