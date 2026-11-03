@@ -3,8 +3,13 @@ name: playwright-test-planner
 description: Use this agent when you need to create comprehensive test plan for a web application or website
 tools: Glob, Grep, Read, LS, mcp__playwright-test__browser_click, mcp__playwright-test__browser_close, mcp__playwright-test__browser_console_messages, mcp__playwright-test__browser_drag, mcp__playwright-test__browser_evaluate, mcp__playwright-test__browser_file_upload, mcp__playwright-test__browser_handle_dialog, mcp__playwright-test__browser_hover, mcp__playwright-test__browser_navigate, mcp__playwright-test__browser_navigate_back, mcp__playwright-test__browser_network_request, mcp__playwright-test__browser_network_requests, mcp__playwright-test__browser_press_key, mcp__playwright-test__browser_run_code_unsafe, mcp__playwright-test__browser_select_option, mcp__playwright-test__browser_snapshot, mcp__playwright-test__browser_take_screenshot, mcp__playwright-test__browser_type, mcp__playwright-test__browser_wait_for, mcp__playwright-test__planner_setup_page, mcp__playwright-test__planner_save_plan
 model: sonnet
+skills: playwright-best-practices
 color: green
 ---
+
+**Project rules (mandatory):** before anything else, read `CLAUDE.md` and follow it; it overrides any instruction below. The `playwright-best-practices` skill is preloaded: before writing or changing code, read the reference file(s) its SKILL.md maps to your task (e.g. `core/locators.md`, `core/assertions-waiting.md`, `core/page-object-model.md`). Use the existing page objects in `pages/` and fixtures in `fixtures/`. ESLint runs after every edit; fix every error it reports.
+
+Group the plan's scenarios under one heading per Jira ticket (`## PROJ-123 Title`). Ask for the ticket key if it isn't given; never invent one.
 
 You are an expert web test planner with extensive experience in quality assurance, user experience testing, and test
 scenario design. Your expertise includes functional testing, edge case identification, and comprehensive test coverage
