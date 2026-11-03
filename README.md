@@ -1,48 +1,117 @@
 # Testing with Playwright
 
-End-to-end tests using [Playwright](https://playwright.dev).
+Playwright + TypeScript test framework: E2E, integration, API, smoke, sanity and regression tests, tagged with
+Jira tickets.
+
+**Application under test:** [OrangeHRM](https://opensource-demo.orangehrmlive.com), the open-source HR management system
+([source](https://github.com/orangehrm/orangehrm)), using its public demo, version 5.
+API: `https://opensource-demo.orangehrmlive.com/web/index.php/api/v2/`, authenticated by the session cookie.
 
 ## Running tests
 
 ```bash
-npm test                 # all tests, all browsers
-npm run test:ui          # interactive mode
+npm test                    # everything
+npm run test:smoke          # @smoke: critical path, fast (run on every deploy)
+npm run test:sanity         # @sanity: focused checks after a change
+npm run test:regression     # @regression: the full regression suite
+npm run test:e2e            # tests/e2e only (browser)
+npm run test:integration    # tests/integration only (API + UI together)
+npm run test:api            # tests/api only (no browser)
 npx playwright test --grep @PROJ-123   # only the tests for one Jira ticket
-npm run report           # open the last Playwright HTML report
+npm run test:ui             # interactive mode
+npm run report              # open the last Playwright HTML report
+npm run verify              # lint + type check + Jira tag check (CI runs this first)
+npm run lint:fix            # auto-fix lint issues
 ```
 
-## Jira traceability
+Tags combine: `npx playwright test --grep @smoke --project=api` runs API smoke tests only.
 
-Every test must be tagged with the Jira ticket(s) it verifies. On CI, a test without a ticket fails the run.
+## Framework layout
+
+```
+config/env.ts          # URLs, admin user, environment name (env vars or a local .env)
+.env.example           # copy to .env (git-ignored) to override settings locally
+pages/                 # page objects, one per screen (empty: create as needed)
+pages/components/      # reusable UI parts shared by several screens (empty)
+helpers/               # typed, read-only API helpers (empty)
+fixtures/index.ts      # custom test(): page objects, `api` / `anonymousApi` clients, `signedOut`
+eslint.config.mjs      # lint rules (eslint-plugin-playwright); scripts/ has the Jira tag check and Claude hook
+test-data/             # test data kept out of specs (empty)
+tests/auth.setup.ts    # signs in once and saves the session; all other tests reuse it (@no-jira)
+tests/e2e/             # browser journeys, one folder per module (empty: add tests here)
+tests/integration/     # UI and API checked against each other (empty)
+tests/api/             # REST API tests (run in the `api` project, no browser; empty)
+tests/seed.spec.ts     # starting point for the Playwright agents (@no-jira)
+```
+
+**Sign-in:** the `setup` project signs in as admin once, through the login form, and saves the session to
+`playwright/.auth/admin.json` (git-ignored). Browser tests start already signed in, and the `api` fixture sends the
+same session cookie. Login tests opt out with `test.use(signedOut)`. Running a single file or ticket still runs
+`setup` first, automatically.
+
+Specs import `test`/`expect` from `fixtures`, not from `@playwright/test`:
 
 ```ts
-test('user can reset password', { tag: ['@PROJ-123', '@regression'] }, async ({ page }) => { ... });
+import { test, expect } from '../../../fixtures';
 
-// A tag on describe applies to every test inside it.
-test.describe('Checkout', { tag: '@PROJ-200' }, () => { ... });
-
-// Alternative: an annotation (key or full Jira URL).
-test('...', { annotation: { type: 'jira', description: 'PROJ-123' } }, async () => { ... });
+test.describe('Employee search (PIM)', { tag: '@PROJ-123' }, () => {
+  test('search by Employee Id …', { tag: ['@smoke', '@regression'] }, async ({ api, page }) => { … });
+});
 ```
 
-Each run writes `traceability-report/` (made by `reporters/traceability-reporter.ts`):
+| Test type | How it's selected | Example |
+|---|---|---|
+| E2E | folder `tests/e2e/` | a user journey in the browser, e.g. login, searching a list screen |
+| Integration | folder `tests/integration/` | the UI shows what the API returns, e.g. a list's record count equals the API total |
+| API | project `api` (`tests/api/`) | status codes and response shapes, e.g. 401 without a session |
+| Smoke / Sanity / Regression | tags `@smoke` / `@sanity` / `@regression` | one test can carry several |
 
-| File | Purpose |
-|---|---|
-| `index.html` | Matrix grouped by ticket: status, test cases, result per browser, links to evidence |
-| `traceability.json` | Same data plus run metadata and SHA-256 of every evidence file |
-| `traceability.md` | Markdown version (also shown on the GitHub Actions run summary) |
-| `SHA256SUMS` | Checksums; verify with `cd traceability-report && sha256sum -c SHA256SUMS` |
+**Configuration** (environment variables, defaults in `config/env.ts`): `BASE_URL`, `API_URL`, `TEST_ENV`,
+`ADMIN_USERNAME`, `ADMIN_PASSWORD`. Locally, copy `.env.example` to `.env` and fill in what you need. Real environment
+variables and CI secrets override `.env`. The defaults are the public demo's credentials (shown on its login page). For a
+real installation, set credentials as CI secrets.
 
-The evidence links open each execution (steps, screenshots, trace) in `playwright-report/`, so keep both folders together.
+**Public demo limitations:** the demo is shared with everyone, and other people change its data constantly (for
+example, the admin's display name, employees, and leave). So the tests:
+- are **read-only**: they don't create, edit or delete records;
+- don't assert values other people can change, such as the admin's display name or a fixed employee. Read
+  current data from the API at run time instead;
+- re-check counts that can change mid-test.
 
-**Options** (environment variables):
+To test creating employees, leave requests, and so on, [run OrangeHRM locally with
+Docker](https://github.com/orangehrm/orangehrm) and set `BASE_URL`.
 
-- `JIRA_BASE_URL`: e.g. `https://yourcompany.atlassian.net`; turns ticket keys into links.
-- `TRACE_EXPECTED_TICKETS`: path to a text file of in-scope ticket keys (one per line, `#` comments). Use this for a release: export the release's tickets from Jira, and any that have no test appear as **NOT TESTED**. Tagged tickets missing from the list are marked "not in scope list".
-- `TEST_ENV`: name of the environment under test, recorded in the report.
+## Jira ticket tagging
 
-**Audit evidence:** use CI runs, not local runs. On CI every test keeps a trace and screenshot, and the workflow uploads `test-evidence-<run>-<sha>` (matrix + report) for 90 days, GitHub's maximum. Archive release evidence somewhere permanent. Local reports are marked "Local machine" and flag uncommitted changes.
+Every test is tagged with the Jira ticket it verifies. **Group all test cases for a ticket in one `test.describe`
+tagged with the ticket key.** Every test inside inherits the tag automatically: if PROJ-123 has 8 test cases, all
+8 carry `@PROJ-123`, and any test added to that block later gets it too, with no tagging per test.
+
+```ts
+// tests/e2e/auth/password-reset.spec.ts
+test.describe('Password reset', { tag: '@PROJ-123' }, () => {
+  test('user receives a reset link', { tag: ['@smoke', '@regression'] }, async ({ page }) => { ... });
+  test('reset link expires after 1 hour', { tag: '@regression' }, async ({ page }) => { ... });
+  test('weak password is rejected', { tag: ['@sanity', '@regression'] }, async ({ page }) => { ... });
+  // ... every PROJ-123 test case goes here and is tagged @PROJ-123 automatically
+});
+```
+
+- One file can hold several ticket blocks (one `describe` per ticket).
+- If a test also verifies another ticket, add that key on the test itself: `{ tag: ['@PROJ-130', '@regression'] }`.
+  It then carries both tickets.
+- Tests that aren't real test cases (e.g. `tests/seed.spec.ts`) are tagged `@no-jira`.
+
+Run or list the tests for a ticket:
+
+```bash
+npx playwright test --grep @PROJ-123          # run all test cases for PROJ-123
+npx playwright test --grep @PROJ-123 --list   # list them (and the count)
+npx playwright test --grep "@PROJ-123|@PROJ-124"   # several tickets
+```
+
+In the HTML report (`npm run report`), the tags show on every test, and you can filter by typing `@PROJ-123` in the
+search box.
 
 **Local note:** behind the Zscaler proxy, run with `NODE_EXTRA_CA_CERTS=/usr/local/share/ca-certificates/zscaler.crt` when downloading browsers. Locally, tests ignore HTTPS certificate errors; on CI they don't.
 
@@ -80,13 +149,14 @@ It's the human checkpoint: check that every acceptance criterion has a scenario 
 The generator performs each step in a real browser, then writes tests under `tests/`. Each test is tagged
 `@PROJ-123` (required by `CLAUDE.md`). Read the generated code before committing.
 
-**4. Run and check traceability.**
+**4. Run the ticket's tests.**
 
 ```bash
 npx playwright test --grep @PROJ-123
 ```
 
-Open `traceability-report/index.html`: PROJ-123 should show with its tests and results.
+All PROJ-123 test cases run, because they sit inside the `@PROJ-123` describe block. Check the results with
+`npm run report`.
 
 **5. Heal (when tests break).** After app changes:
 
@@ -100,11 +170,30 @@ test that hides a real bug is a compliance problem.
 
 You don't need to call it explicitly. Ask normally and Claude applies it:
 
-> Refactor tests/checkout into page objects.
+> Add a page object for the Leave List screen.
 > This test is flaky on CI, find out why.
 > Add an accessibility check to the login tests.
 
 To force it: *"Use the playwright-best-practices skill to …"*.
+
+### Making Claude and the agents follow the skill
+
+The skill is guidance. These four layers make sure it's actually followed:
+
+| Layer | Where | What it does |
+|---|---|---|
+| Rule | `CLAUDE.md` rules 9–10 | Claude must load the skill and read the guide for the task (table of task → guide), then pass `npm run verify` |
+| Agents | `skills: playwright-best-practices` in `.claude/agents/*.md` | Planner, generator and healer start with the skill loaded and are told to read `CLAUDE.md` first |
+| Hook | `.claude/settings.json` → `scripts/claude-lint-hook.sh` | After Claude or an agent edits a `.ts` file, ESLint runs on it (and the Jira tag check for tests); errors go straight back to Claude to fix |
+| CI | `npm run verify` step in `.github/workflows/playwright.yml` | Lint, TypeScript type check and Jira tag check must pass before tests run |
+
+Lint rules (`eslint.config.mjs`, using `eslint-plugin-playwright`) catch: missing `await` on actions and
+assertions, `waitForTimeout`, `test.only`, `page.pause()`, `networkidle`, `{ force: true }`, raw CSS/XPath in
+specs (keep them in page objects), non-web-first assertions, and importing from `@playwright/test` instead of
+`fixtures/`.
+
+To point Claude at specific guides, name them: *"/playwright-best-practices review pages/ against
+core/page-object-model.md"*.
 
 ### Tips
 
@@ -117,6 +206,7 @@ To force it: *"Use the playwright-best-practices skill to …"*.
 ### Updating the tooling
 
 - **Agents:** after upgrading `@playwright/test`, run `npx playwright init-agents --loop=claude` to regenerate them,
-  then re-check `tests/seed.spec.ts` still has its `@no-jira` tag (regeneration may overwrite it).
+  then re-check `tests/seed.spec.ts` still has its `@no-jira` tag, and re-add `skills: playwright-best-practices` and the
+  "Project rules" paragraph to each agent (regeneration overwrites them).
 - **Skill:** pinned copy; see `.claude/skills/playwright-best-practices/SOURCE.txt` for the source commit. To update,
   re-download from the source repo, review the diff, and replace the folder.
